@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-marketing-agency"
+version = "1.0.0"
+description = "AI-native marketing agency — multi-agent system powered by Claude"
+requires-python = ">=3.11"
+dependencies = [
+    # Core Anthropic SDK — messages API + streaming + batches
+    "anthropic>=0.40.0",
+    # Claude Agent SDK — subagents, hooks, MCP
+    "claude-agent-sdk>=0.1.0",
+    # Async HTTP for web scraping (Brave Search, fetch)
+    "httpx>=0.27.0",
+    # Environment variable management
+    "python-dotenv>=1.0.0",
+    # Structured data parsing
+    "pydantic>=2.7.0",
+    # Rate limiting utilities
+    "tenacity>=8.3.0",
+    # Date/time utilities
+    "python-dateutil>=2.9.0",
+    # Rich terminal output for CLI
+    "rich>=13.7.0",
+    # Async utilities
+    "anyio>=4.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+agency = "agency.cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

@@ -1,0 +1,48 @@
+# Environment
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Outputs (generated deliverables — not committed)
+outputs/*
+!outputs/.gitkeep
+
+# Intel caches (regenerated on demand)
+competitor_intel/*/raw_research/
+content_intel/*/creators/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ruff
+.ruff_cache/
+
+# Logs
+*.log
+logs/
