@@ -48,4 +48,17 @@ Quantity without quality is waste. We produce:
 
 ---
 
+## Active Client: طورشيكو (Torshiko)
+
+- **Category:** Food & Beverage — Pickles / Condiments
+- **Market:** Egypt
+- **Stage:** Pre-launch / Startup
+- **USP:** Proprietary secret recipe, unique taste unlike anything on market
+- **Target:** Individuals/families + restaurants (B2B + B2C)
+- **Goal:** Viral launch — "حاجه تكسر الدنيا"
+- **Brand Personality:** Bold, authentic, playful, challenger. Egyptian pride. Speaks Egyptian Arabic.
+- **Files:** `clients/torshiko/`
+
+---
+
 *This file is used as context by research, copy, and strategy agents.*
