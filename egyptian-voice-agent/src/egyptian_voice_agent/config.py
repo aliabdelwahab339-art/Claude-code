@@ -37,11 +37,24 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""
 
-    # ── Twilio
+    # ── Telephony
+    telephony_provider: Literal["twilio", "livekit_sip"] = "twilio"
+
+    # Twilio (default, Tier 1)
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
     twilio_phone_number: str = ""
     public_base_url: str = ""
+
+    # LiveKit SIP (Tier 2 / Tier 3 — populated during migration)
+    livekit_url: str = ""
+    livekit_api_key: str = ""
+    livekit_api_secret: str = ""
+    sip_trunk_id: str = ""
+    sip_outbound_address: str = ""
+    sip_outbound_username: str = ""
+    sip_outbound_password: str = ""
+    ntra_license_number: str = ""
 
     # ── CRM
     crm_sink: Literal["sheets", "hubspot", "webhook"] = "sheets"

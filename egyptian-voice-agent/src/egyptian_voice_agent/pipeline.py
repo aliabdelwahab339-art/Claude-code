@@ -33,6 +33,7 @@ from starlette.websockets import WebSocket
 
 from egyptian_voice_agent.config import settings
 from egyptian_voice_agent.dialect.fallbacks import normalize_egyptian
+from egyptian_voice_agent.dialect.optout import FAREWELL_AR_EG, detect_opt_out
 from egyptian_voice_agent.integrations import telemetry
 from egyptian_voice_agent.llm import prompts
 from egyptian_voice_agent.llm.tools import TOOLS, dispatch
@@ -92,6 +93,54 @@ class _EgyptianNormalizer(FrameProcessor):
         if text and isinstance(text, str):
             frame.text = normalize_egyptian(text)
         await self.push_frame(frame, direction)
+
+
+class _OptOutShortCircuit(FrameProcessor):
+    """Intercept opt-out phrases before the LLM runs.
+
+    Matches Egyptian opt-out patterns on the normalized transcript.
+    On match: speaks a brief farewell, fires `end_call`, hangs up.
+    Skips the Claude turn entirely — saves tokens AND is PDPL-required
+    (don't pitch after opt-out).
+    """
+
+    def __init__(self, call_sid: str, caller_phone: str | None):
+        super().__init__()
+        self.call_sid = call_sid
+        self.caller_phone = caller_phone
+        self._triggered = False
+
+    async def process_frame(self, frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        text = getattr(frame, "text", None)
+        if self._triggered or not text or not isinstance(text, str):
+            await self.push_frame(frame, direction)
+            return
+        match = detect_opt_out(text)
+        if match is None:
+            await self.push_frame(frame, direction)
+            return
+        self._triggered = True
+        logger.info(
+            "opt_out_short_circuit call_sid=%s rule=%d phrase=%r",
+            self.call_sid,
+            match.rule_index,
+            match.matched_phrase,
+        )
+        # Speak a brief farewell directly, skipping the LLM.
+        await self.push_frame(
+            LLMMessagesFrame(messages=[{"role": "assistant", "content": FAREWELL_AR_EG}]),
+            FrameDirection.DOWNSTREAM,
+        )
+        # Fire end_call so telemetry + CRM state land correctly.
+        await dispatch(
+            "end_call",
+            {"outcome": "not_qualified", "summary_ar": f"opt-out: {match.matched_phrase}"},
+            call_sid=self.call_sid,
+            caller_phone=self.caller_phone,
+        )
+        telemetry.finalize(self.call_sid, outcome="not_qualified")
+        await self.push_frame(EndFrame(), FrameDirection.DOWNSTREAM)
 
 
 class _ToolDispatcher(FrameProcessor):
@@ -177,6 +226,7 @@ async def run_call(
 
     tts = _build_tts()
     normalizer = _EgyptianNormalizer()
+    optout = _OptOutShortCircuit(call_sid=call_sid, caller_phone=caller_phone)
     dispatcher = _ToolDispatcher(call_sid=call_sid, caller_phone=caller_phone)
     user_agg = LLMUserResponseAggregator()
     asst_agg = LLMAssistantResponseAggregator()
@@ -186,6 +236,7 @@ async def run_call(
             transport.input(),
             stt,
             normalizer,
+            optout,
             user_agg,
             llm,
             dispatcher,
