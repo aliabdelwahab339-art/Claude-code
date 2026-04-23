@@ -141,8 +141,16 @@ async def run_call(
     call_sid: str,
     caller_phone: str | None,
     stream_sid: str,
+    direction: str = "inbound",
+    lead_name: str | None = None,
+    context: str | None = None,
 ) -> None:
-    """Drive a single call end-to-end over the given Twilio Media Streams WS."""
+    """Drive a single call end-to-end over the given Twilio Media Streams WS.
+
+    `direction` ("inbound"|"outbound"), `lead_name`, and `context` are read
+    from Twilio's start-event `customParameters` by `server.py` and shape the
+    first turn so the agent greets correctly for outbound dials.
+    """
     telemetry.start_call(call_sid, caller_phone=caller_phone)
 
     transport = FastAPIWebsocketTransport(
@@ -199,8 +207,11 @@ async def run_call(
     # Speak the greeting as the very first turn so the caller doesn't hear silence.
     @transport.event_handler("on_client_connected")
     async def _on_connected(transport, client):
+        greeting_text = prompts.greeting(
+            direction=direction, lead_name=lead_name, context=context
+        )
         await task.queue_frame(
-            LLMMessagesFrame(messages=[{"role": "assistant", "content": prompts.greeting()}])
+            LLMMessagesFrame(messages=[{"role": "assistant", "content": greeting_text}])
         )
 
     @transport.event_handler("on_client_disconnected")

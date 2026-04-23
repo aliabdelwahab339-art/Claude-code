@@ -59,31 +59,65 @@ curl https://<app>.fly.dev/health
 
 ## 4. Wire up Twilio
 
-1. In the Twilio console, buy an Egypt number (or a US/UK number if Egypt
-   inbound regulation is not yet cleared — see **Egypt regulation** below).
+1. In the Twilio console, buy an Egypt number. You'll need to submit a
+   regulatory bundle via Twilio using your Egyptian entity's commercial
+   registration / tax ID (CRN) and a proof of local address. Approval
+   usually takes 1–5 business days.
 2. Phone Numbers → Active Numbers → your number → Voice & Fax → **A Call Comes In**:
    set to `Webhook`, URL = `https://<app>.fly.dev/twilio/voice`, HTTP POST.
-3. Call the number. You should hear the Egyptian-Arabic greeting.
+3. Set `TWILIO_PHONE_NUMBER=+20...` in `.env` (or `fly secrets set`). This is
+   the caller ID used for outbound dials too.
+4. Call the number. You should hear the Egyptian-Arabic greeting.
 
-### Egypt regulation (heads-up)
+## 5. Make outbound calls
 
-Egypt's NTRA requires a local entity + ID for inbound PSTN numbers. Options:
+The agent can both receive and place calls. Outbound uses the same pipeline
+with an outbound-specific greeting.
 
-- Start **outbound-only** from a US/UK Twilio number (caller ID still reads
-  the Twilio number). Good for cold-outreach pilots.
-- Use a Twilio **regulatory bundle** via a local partner.
-- Port an existing Egyptian landline you already operate.
+**Single call (for testing):**
+```bash
+python scripts/outbound_call.py \
+  --to +201012345678 \
+  --name "أحمد" \
+  --context "متابعة طلب عرض السعر"
+```
 
-The code is identical either way — only the Twilio number provisioning differs.
+**Batch from a CSV** (columns: `to,name,context`; sample at
+`tests/fixtures/leads_example.csv`):
+```bash
+python scripts/outbound_call.py --csv leads.csv --pace 20 --max 50
+```
 
-## 5. Daily operations
+**From your own system**, POST to the HTTP endpoint:
+```bash
+curl -X POST https://<app>.fly.dev/outbound/call \
+  -H "X-API-Key: $OUTBOUND_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"to":"+201012345678","lead_name":"أحمد","context":"متابعة"}'
+```
+
+### Compliance guardrails (enabled by default)
+
+- **DNC list.** Path at `DNC_PATH` (one E.164 per line, `#` comments allowed).
+  Any number in this list is silently skipped.
+- **Calling hours.** 09:00–21:00 Cairo local time, Saturday–Thursday.
+  Friday is a rest day and skipped by default. Bypass with `--force` **only
+  when you have explicit consent from the lead** (e.g. they booked a 10 PM
+  callback themselves).
+- **Machine detection.** Twilio's `DetectMessageEnd` mode is enabled — the
+  pipeline will not speak to voicemail.
+- **Opt-out.** The system prompt instructs the agent to immediately end any
+  call where the lead says "ما تكلمنيش تاني" (don't call me again). Add
+  those numbers to your DNC CSV and redeploy.
+
+## 6. Daily operations
 
 - Lead flow: check the Google Sheet tab configured in `GOOGLE_SHEET_TAB` (default `Leads`).
 - Cost audit: `fly ssh console -C "python scripts/cost_rollup.py --days 7"`.
 - Dialect eval: run `python -m tests.dialect_eval` locally against `tests/fixtures/*.wav`.
 - Prompt iteration: edit `prompts/system_prompt_ar_eg.md` and redeploy.
 
-## 6. Scaling
+## 7. Scaling
 
 - Fly.io autoscale: set `min_machines_running = 2` in `fly.toml` once you
   regularly see >20 concurrent calls.

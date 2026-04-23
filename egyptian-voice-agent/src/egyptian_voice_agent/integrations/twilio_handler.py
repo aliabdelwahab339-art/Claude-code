@@ -9,11 +9,26 @@ from twilio.twiml.voice_response import Connect, VoiceResponse
 from egyptian_voice_agent.config import settings
 
 
-def build_stream_twiml(stream_url: str) -> str:
-    """TwiML that connects the call to our Media Streams WebSocket."""
+def build_stream_twiml(
+    stream_url: str,
+    *,
+    direction: str = "inbound",
+    lead_name: str | None = None,
+    context: str | None = None,
+) -> str:
+    """TwiML that connects the call to our Media Streams WebSocket.
+
+    Extra parameters are attached via <Parameter> children; Twilio surfaces
+    them on the WS `start` event as `start.customParameters`.
+    """
     response = VoiceResponse()
     connect = Connect()
-    connect.stream(url=stream_url)
+    stream = connect.stream(url=stream_url)
+    stream.parameter(name="direction", value=direction)
+    if lead_name:
+        stream.parameter(name="lead_name", value=lead_name)
+    if context:
+        stream.parameter(name="context", value=context)
     response.append(connect)
     return str(response)
 

@@ -4,7 +4,8 @@ An AI voice agent that answers your business phone in **Egyptian Arabic dialect*
 
 ## What it does
 
-- Picks up Twilio calls in a warm, natural Egyptian voice.
+- **Inbound:** picks up Twilio calls in a warm, natural Egyptian voice.
+- **Outbound:** dials a list of Egyptian leads from a CSV or your CRM, respecting DNC and local calling hours.
 - Runs a scripted BANT qualification (Need, Budget, Authority, Timeline) in Egyptian colloquial — never switches to MSA.
 - Calls tools mid-conversation: `log_lead`, `book_callback`, `transfer_to_human`, `end_call`.
 - Writes qualified leads to Google Sheets (default), HubSpot, or a generic webhook.
@@ -42,6 +43,27 @@ fly deploy
 ```
 
 Point your Twilio number's Voice webhook at `https://<your-app>.fly.dev/twilio/voice`. Call it. Done.
+
+## Outbound dialing
+
+Single call:
+```bash
+python scripts/outbound_call.py \
+  --to +201012345678 \
+  --name "أحمد" \
+  --context "متابعة طلب عرض السعر"
+```
+
+Batch from CSV (`to,name,context` columns; see `tests/fixtures/leads_example.csv`):
+```bash
+python scripts/outbound_call.py --csv leads.csv --pace 20 --max 50
+```
+
+Enforced guards:
+- **DNC list** at `DNC_PATH` — E.164 numbers one per line, never dialed.
+- **Calling hours** — 09:00–21:00 Cairo, Saturday–Thursday (Friday is off). Bypass with `--force` only when you have explicit consent.
+
+Or trigger dials from your own system by POSTing to `/outbound/call` with an `X-API-Key` header matching `OUTBOUND_API_KEY`.
 
 Full walkthrough: [`docs/DEPLOY.md`](docs/DEPLOY.md).
 

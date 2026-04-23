@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     # ── Telemetry
     telemetry_path: Path = Field(default=Path("data/calls.jsonl"))
 
+    # ── Outbound dialing
+    dnc_path: Path | None = None
+    outbound_api_key: str = ""
+
     # ── Server
     host: str = "0.0.0.0"
     port: int = 8080
