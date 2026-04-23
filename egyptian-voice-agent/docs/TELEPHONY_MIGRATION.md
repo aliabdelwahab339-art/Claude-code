@@ -1,118 +1,136 @@
-# Telephony migration — how to cut your bill 5–30×
+# Telephony — Tier-3 landline is the destination
 
-Your telephony bill is 85–92% of total cost. Everything else (LLM, STT, TTS,
-compute) is a rounding error at any volume under 100K minutes/month. So this
-is the one doc that matters for unit economics.
+Your target architecture is a commercial **Egyptian landline SIP trunk**
+(Telecom Egypt / WE Business, Vodafone Business, Orange Business, or
+e& Business) behind **LiveKit SIP**, with caller-ID registered against an
+**NTRA contact-center license**.
 
-There are three tiers. Move up the tier ladder as your volume justifies the
-operational overhead of the next one.
+Everything else in this codebase — Twilio, Pipecat, Deepgram, Claude,
+Azure TTS — stays the same. The transport layer swaps; the pipeline
+doesn't care.
 
-## Tier 1 — Twilio (default, shipped code)
+## Why landline and not mobile SIP
 
-- **Rate to Egypt mobile:** ~$0.17/min blended
-- **Setup:** regulatory bundle with your Egyptian entity (1–5 business days)
-- **Pros:** everything works out of the box, `scripts/outbound_call.py` +
-  Media Streams already wired.
-- **Cons:** most expensive termination. No local caller-ID presence.
-- **When to use:** pilot up to ~1,000 calls/month. Under that, the 25–95%
-  savings from tiers 2–3 are smaller than the engineering time to migrate.
+1. **Cost:** landline SIP trunks from Egyptian operators price outbound
+   minutes at roughly EGP 0.03–0.15/min (~$0.001–0.005) vs. Twilio's
+   ~$0.17/min. That's a 30–150× cut on the dominant line item.
+2. **Pickup rate:** Egyptian recipients heavily screen unknown mobile
+   caller-IDs because of spam saturation. A registered landline DID
+   (02-... Cairo, 03-... Alexandria, etc.) typically sees **1.5–2× the
+   answer rate** of a mobile caller-ID. That effectively halves your cost
+   per connected conversation on top of the per-minute saving.
+3. **Regulatory simplicity:** landline-based SIP trunks are a standard
+   business product from every Egyptian operator. You still need the
+   NTRA contact-center license for high-volume outbound, but the trunk
+   itself is turnkey from a licensed operator and comes with compliance
+   attached.
 
-## Tier 2 — Wholesale SIP (DIDWW / CommPeak / AstraQom)
+## Where to start
 
-- **Rate to Egypt mobile:** ~$0.14–$0.18/min (20–30% below Twilio)
-- **Setup:** open an account with DIDWW or CommPeak, request an Egypt rate
-  sheet, get a SIP trunk (IP auth or username/password), port or buy an
-  Egyptian DID through them. Timeline: 1–2 weeks.
-- **Code changes:** swap Twilio for a SIP provider. The cleanest route is
-  **LiveKit SIP** (Apache 2.0, self-hostable or cloud). You keep Pipecat as
-  the pipeline, swap the transport. See *Code migration* below.
-- **When to use:** 1,000–10,000 calls/month. Realistic monthly saving at
-  10K calls: ~$1,500. Worth 1–2 weeks of engineering once.
+If you have a specific company in mind that's already running a voice
+agent on an Egyptian landline, ask them one question:
 
-## Tier 3 — Local Egyptian SIP (the big lever)
+> "إنتوا متعاقدين مع مين على الـSIP trunk بتاع التليفون الأرضي؟"
 
-- **Rate to Egypt mobile:** ~$0.005/min (essentially free vs. Tier 1)
-- **Providers:** Telecom Egypt Business, WE Business, Vodafone Egypt
-  Business, Orange Egypt Business, Etisalat Misr.
-- **Setup (operational — not code):**
-  1. **NTRA Contact Center License** under NTRA's 2024 commercial-calling
-     regulations. Takes 4–8 weeks. Your Egyptian entity applies; a lawyer
-     familiar with telecoms law (~EGP 15–30K one-time fee) is recommended.
-  2. **SIP trunk contract** with one of the local operators above, tied to
-     your NTRA license. Most operators quote EGP/month plus per-minute
-     rates; expect a ~EGP 3,000–10,000/mo base fee plus usage, plus a
-     deposit.
-  3. **Caller-ID registration** — every outbound number must be registered
-     in the mobile operators' commercial-numbers database (the "NTRA
-     Alert" / company-name system). Unregistered numbers get disconnected
-     within weeks; repeat violators are permanently banned.
-  4. **PDPC Electronic Marketing license** (see `COMPLIANCE.md`).
-- **Code changes:** same as Tier 2 — LiveKit SIP with a different trunk
-  configuration. Once LiveKit SIP is running, swapping trunks is a config
-  change.
-- **When to use:** ≥5,000 calls/month sustained. Break-even versus Tier 1
-  is typically month 2. At 10K calls/month the saving is ~$4,400.
+Their answer is almost certainly one of: WE Business, Vodafone Business,
+Orange Business, or e& Business. Go to the same operator with your
+Egyptian entity's commercial registration in hand.
 
-## Realistic math
+If you have no reference, **default to WE Business (Telecom Egypt)** —
+largest network, broadest landline-DID inventory, most competitive
+published rates. Detailed product list, sales script, and document
+checklist: [`LANDLINE_PROVISIONING.md`](LANDLINE_PROVISIONING.md).
 
-At 10,000 calls/month × 3 min avg = 30,000 min/month:
+## Timeline
 
-| Tier | Telephony $/min | Monthly telephony | All-in $/call | Ops overhead |
-|---|---|---|---|---|
-| 1 — Twilio | $0.174 | $5,220 | $0.57 | None (shipped) |
-| 2 — DIDWW wholesale | $0.145 | $4,350 | $0.48 | 1–2 wk engineering + BAA |
-| 3 — Local EG SIP | $0.005 | $150 | $0.13 | NTRA license + local contract + ~1 month cal. time |
+Plan ~8–12 weeks from "decision made" to "first production call":
 
-At 1,000 calls/month the absolute savings are smaller and Tier 1 is fine.
+| Week | Activity |
+|---|---|
+| 1 | Engage a telecoms lawyer; start the NTRA contact-center license filing |
+| 1–2 | Operator sales call; request SIP trunk quote + product sheet |
+| 2 | Sign operator contract; pay setup fee + deposit; operator begins provisioning |
+| 2–3 | Operator activates trunk in test mode (inbound + on-net only) |
+| 3–4 | Engineering: LiveKit project setup; wire trunk credentials into this codebase; end-to-end test call |
+| 4–8 | NTRA license processing (lawyer follows up); PDPC registration in parallel |
+| 8–10 | NTRA license issued; operator enables commercial outbound |
+| 10–12 | Caller-ID registration propagates across mobile operators; scale up volume |
 
-## Code migration (Tier 2 and Tier 3 both)
+Tier-1 Twilio stays running during this whole period. You can run a pilot
+(~500 calls/month) on Twilio while the paperwork processes, so you're
+collecting prompt-tuning data and lead-qualification insights from day one
+instead of waiting 10 weeks.
 
-The current code talks to Twilio via Media Streams. The migration target is
-**LiveKit SIP** because:
+## The code migration (once credentials arrive)
 
-- Apache-2.0, cloud or self-host (self-host in `me-south-1` Bahrain for
-  PDPL-clean data residency — see `COMPLIANCE.md`).
-- Native SIP ingress for any Tier 2/3 trunk provider.
-- Pipecat has a first-class `LiveKitTransport` — the STT→LLM→TTS pipeline
-  in `src/egyptian_voice_agent/pipeline.py` is unchanged. Only the
-  transport at the edges swaps out.
+One commit, contained to these files:
 
-Rough shape of the migration:
+1. `src/egyptian_voice_agent/outbound.py` — LiveKit SIP branch dials via
+   `livekit.api.LiveKitAPI.sip.create_sip_participant()` instead of
+   `twilio.Client.calls.create()`.
+2. `src/egyptian_voice_agent/transport/livekit.py` (new) — builds Pipecat's
+   `LiveKitTransport` for inbound rooms dispatched by LiveKit SIP.
+3. `src/egyptian_voice_agent/worker.py` (new) — long-running agent worker
+   that registers with LiveKit, joins rooms as they're created, runs the
+   existing pipeline.
+4. `pyproject.toml` — add `livekit`, `livekit-api` to the `[sip]` optional
+   deps group.
 
-1. Create a LiveKit project (cloud) or deploy LiveKit self-hosted.
-2. Configure LiveKit SIP with your trunk credentials (IP-auth or
-   user/pass depending on provider).
-3. Add a `TRANSPORT=livekit` option alongside today's `TRANSPORT=twilio` —
-   `pipeline.run_call()` already takes `direction` + context as plain
-   args, so swapping the transport layer is isolated.
-4. Configure the LiveKit SIP dispatch rule to route calls into a Pipecat
-   worker room.
-5. For outbound, use LiveKit's SIP "CreateSIPParticipant" REST API instead
-   of `twilio.calls.create` in `src/egyptian_voice_agent/outbound.py`.
+The shipped outbound path (`outbound.place_call()`) already branches on
+`settings.telephony_provider`. Today the `livekit_sip` branch raises with
+a "fill in SIP trunk credentials" error — that lights up as soon as you
+set the env vars.
 
-Keep the Twilio path in place during migration — flip per-call with an env
-flag so you can roll back if the local trunk has quality issues on day one.
+Nothing in the pipeline itself (STT → LLM → TTS) changes. The prompts
+don't change. The tools don't change. Only the transport swap.
 
-## Three other cost levers (smaller, but additive)
+## One-time upfront cost to reach Tier 3
 
-1. **Call-duration tuning.** The system prompt already pushes < 25-word
-   turns; the April 2026 update (commit e2485d0+) tightens it further to
-   target 90–120s median call length. That alone cuts ~30% off every
-   telephony bill across all tiers.
-2. **Opt-out short-circuit.** `src/egyptian_voice_agent/dialect/optout.py`
-   intercepts opt-out phrases before the LLM, hangs up in ~3s instead of
-   ~20s, and skips a Claude round-trip. Saves ~$0.10–$0.30 per opt-out call
-   and is PDPL-required.
-3. **Self-hosted TTS (future).** NAMAA-Egyptian-TTS or NileTTS on a single
-   L4 GPU (~$400/mo fixed) breaks even on TTS spend around 25M
-   characters/month (~28K calls). Below that, Azure + ElevenLabs is
-   cheaper. Don't self-host early.
+| Item | Cost (one-time) |
+|---|---|
+| Telecoms lawyer — NTRA + PDPC filings | EGP 20,000–40,000 (~$400–800) |
+| NTRA contact-center license fee | EGP 10,000–25,000 (~$200–500) |
+| PDPC data-controller registration | EGP 5,000–10,000 (~$100–200) |
+| PDPC Electronic Marketing license | EGP 10,000–20,000 (~$200–400) |
+| Operator setup fee + deposit (held, refundable) | EGP 5,000–15,000 (~$100–300) |
+| LiveKit Cloud first-month starter | $0 (free tier covers pilot) |
+| **Subtotal out-of-pocket** | **~$1,000–2,200** |
 
-## When NOT to migrate
+Recovered in **2–6 weeks** of operating at 1,000+ calls/month. At 10,000
+calls/month the whole one-time budget is paid back in ~4 days of
+telephony savings vs. Tier 1.
 
-- Below 1,000 calls/month: stay on Twilio. Total bill at that volume is
-  under $100/mo; the ops work on Tier 2/3 isn't justified.
-- Inbound-heavy traffic (lead calls you): Twilio inbound is already
-  ~$0.013/min, so the Tier-3 lever on outbound doesn't help much.
-- If your product is high-AOV B2B (each closed lead >$1,000): quality
-  matters more than $/min. Stay on Twilio and upgrade TTS instead.
+## Tier 2 (wholesale SIP) — skip it
+
+Tier 2 (DIDWW / CommPeak / AstraQom wholesale SIP without an Egyptian
+operator contract) was in the earlier version of this doc. **Skip it as
+a destination.** Reasoning:
+
+- It saves ~20–30% vs. Twilio. Tier 3 saves ~95%.
+- The LiveKit-side code migration is identical — you're doing the
+  engineering work anyway.
+- The regulatory track (NTRA license) is the same.
+- Wholesale caller-IDs don't carry the Egyptian-landline trust signal
+  that drives answer rates, so you keep half the loss of going to mobile.
+
+Tier 2 is only interesting as a **transitional bridge** if you need to get
+off Twilio before the NTRA license lands — which is rarely justified
+because Twilio works fine for pilot volumes (<1K calls/mo).
+
+## When to stay on Tier 1 anyway
+
+- Monthly call volume below ~500. Absolute savings (under ~$70/month) are
+  smaller than the lawyer's retainer.
+- Testing a new product line: stay on Twilio until you've validated the
+  conversion economics before committing to the Tier-3 overhead.
+- Inbound-only workloads: Twilio inbound is already ~$0.013/min, so the
+  Tier-3 lever on outbound doesn't help much.
+
+## Where to read next
+
+- **[`LANDLINE_PROVISIONING.md`](LANDLINE_PROVISIONING.md)** — the step-
+  by-step playbook: operators, sales script, trunk credentials, plugging
+  them into this codebase.
+- **[`COMPLIANCE.md`](COMPLIANCE.md)** — NTRA + PDPL in detail, required
+  before live operation.
+- **[`COSTS.md`](COSTS.md)** — full cost model at each tier and volume.
